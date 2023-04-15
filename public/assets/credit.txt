@@ -1,0 +1,2 @@
+grass.png from https://zlab.itch.io/realistic-texture-pack
+tank.obj from hiukong

@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
 console.log("Hello world");
 
+/** module facing -y imported from blender */
 const objLoader = new OBJLoader();
 
 const camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 10 );
@@ -22,10 +24,26 @@ const renderer = new THREE.WebGLRenderer( { antialias: true } );
 renderer.setSize( window.innerWidth, window.innerHeight );
 // renderer.setAnimationLoop( animation );
 document.body.appendChild( renderer.domElement );
+const pointerLockControl = new PointerLockControls(camera, document.body);
+console.log(pointerLockControl);
+
 
 var isMouseDown = false;
 
 var tank = null;
+var tank_pref = null;
+var bullet_pref = null;
+
+var bullet_fire_interval = 3000; // 3 seconds
+
+var pointer_last_frame_position = new THREE.Vector2();
+var cameraRotation = null;
+/** pitch, yaw, roll */
+var cameraVelocity = new THREE.Vector3(1, 1, 0);
+var pitchAngleMin = -45;
+var pitchAngleMax = 0;
+var cameraLookatObj = new THREE.Object3D();
+var cameraDeadZone = 1; // pixels
 
 const textureLoader = new THREE.TextureLoader();
 
@@ -35,6 +53,8 @@ grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(600, 600);
 
 var raycaster = new THREE.Raycaster();
+
+var commonMaterial = new THREE.MeshToonMaterial({color: 0x8F9779});
 
 var floorMesh = new THREE.BoxGeometry(10, 0.2, 10);
 var floorMaterial = new THREE.MeshToonMaterial({color: 0x50C878, map:grassTexture});
@@ -48,6 +68,7 @@ var isTurnLeft = false;
 var isTurnRight = false;
 var isMoveForward = false;
 var isMoveBackward = false;
+var canFire = false;
 var isFiring = true;
 var currentSpeed = 0;
 var maxSpeed = 0.01;
@@ -84,6 +105,34 @@ addEventListener("mouseup", event=>{
 addEventListener("mousemove", event=>{
    if (!isMouseDown) return;
 
+});
+
+
+document.addEventListener( 'click', function () {
+   pointerLockControl.lock();
+});
+
+pointerLockControl.addEventListener("change", function(event){
+   //console.log(event);
+   return;
+   if (cameraRotation == null){
+      pointer_last_frame_position.set(event.x, event.y);
+      cameraRotation = new THREE.Vector3();
+      console.log(cameraRotation);
+   }
+   else{
+      var pitch = (event.y - pointer_last_frame_position.y)/10 * cameraVelocity.y;
+      var yaw = (event.x - pointer_last_frame_position.x)/10 * cameraVelocity.x;
+      cameraRotation.set(pitch, -yaw, 0);
+
+      if(Math.abs(event.x - pointer_last_frame_position.x) <= cameraDeadZone){
+         cameraRotation.y = 0;
+      }
+      if(Math.abs(event.y - pointer_last_frame_position.y) <= cameraDeadZone){
+         cameraRotation.x = 0;
+      }
+      pointer_last_frame_position.set(event.x, event.y);
+   }
 });
 
 addEventListener('keydown', function(event) {
@@ -139,39 +188,58 @@ addEventListener('keydown', function(event) {
  });
 
 /** loading models */
-// load a resource
-objLoader.load(
-	// resource URL
-	'/assets/tank.obj',
-	// called when resource is loaded
-	function ( object ) {
-      console.log(object);
-      var material = new THREE.MeshToonMaterial({color: 0x8F9779});
-      object.children.forEach((mesh)=>{
-         if (mesh){
-            mesh.material = material;
-         }
-      })
-      object.position.z = -1;
-      object.position.y = 0.5;
-      object.scale.copy(new THREE.Vector3(0.2, 0.2, 0.2));
-		scene.add( object );
+function load_model(module_path){
+   var prefab = new THREE.Object3D();
+   objLoader.load(
+      // resource URL
+      module_path,
+      // called when resource is loaded
+      function ( object ) {
+         object.children.forEach((mesh)=>{
+            if (mesh){
+               mesh.material = commonMaterial;
+            }
+         })
+         object.scale.set(0.2, 0.2, 0.2);
+         prefab.copy(object, true);
+      },
+      // called when loading is in progresses
+      function ( xhr ) {
+         console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+      },
+      // called when loading has errors
+      function ( error ) {
+         console.log( 'An error happened: ' + error );
+      }
+   );
+   return prefab;
+}
 
-      tank = object;
-	},
-	// called when loading is in progresses
-	function ( xhr ) {
+tank_pref = load_model("/assets/tank.obj");
+bullet_pref = load_model("/assets/bullet.obj");
 
-		console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+async function instantiateTank(){
+   tank = tank_pref.clone(true);
+   tank.position.z = -1;
+   tank.position.y = 0.5;
+   console.log(tank);
+   scene.add(tank);
+   cameraLookatObj.position.copy(tank.position);
+}
 
-	},
-	// called when loading has errors
-	function ( error ) {
+function instantiateBullet(){
+   var bullet = bullet_pref.clone(true);
+   bullet.position.copy(tank.position);
+   console.log(bullet);
+   scene.add(bullet);
+}
+setTimeout(() => {
+   instantiateTank();
+}, 1000);
 
-		console.log( 'An error happened: ' + error );
-
-	}
-);
+setTimeout(() => {
+   canFire = true;
+}, 1000);
 
 // animation
 
@@ -183,12 +251,29 @@ function render(time){
 
       var newPos = new THREE.Vector3();
       newPos.copy(tank.position);
-      newPos.x += direction.x*2;
-      newPos.z += direction.z*2;
-      newPos.y = 2;
+      newPos.x += direction.x;
+      newPos.z += direction.z;
+      newPos.y = 1;
       camera.position.copy(newPos);
-      camera.lookAt(tank.position);
-      //camera.rotation.z = tank.rotation.z;
+      
+      //camera.lookAt(tank.position);
+
+      if (cameraRotation != null){
+         /** camera rotation */
+         //var newPitch = camera.rotation.x + cameraRotation.x;
+         //newPitch = THREE.MathUtils.clamp(newPitch, pitchAngleMin, pitchAngleMax);
+         //console.log(camera.rotation);
+         //var euler = new THREE.Euler(newPitch, newYaw, 0);
+
+         //cameraLookatObj.rotateOnWorldAxis(new THREE.Vector3())
+         //console.log(cameraRotation.y);
+         tank.rotateY(cameraRotation.y*THREE.MathUtils.DEG2RAD);
+         // console.log(tank.rotation);
+         
+         //camera.rotateOnAxis(new THREE.Vector3(0, 0, 1), newYaw*THREE.MathUtils.DEG2RAD);
+         //console.log(tank);
+      }
+
    }
    renderer.render( scene, camera );
 
@@ -211,6 +296,18 @@ function render(time){
    else if(isTurnRight){
       turningAngle = -1;
    }
+
+   /** FIRE */
+   if (isFiring && canFire){
+      //instantiateBullet();
+      instantiateBullet();
+      canFire = false;
+      setTimeout(() => {
+         canFire = true;
+      }, bullet_fire_interval);
+   }
+
+
 
    /** update tank rotation and position */
    if(turningAngle != 0){

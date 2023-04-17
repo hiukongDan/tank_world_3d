@@ -20,7 +20,10 @@ scene.fog = new THREE.FogExp2( 0xadadad, 0.01 );
 const light = new THREE.AmbientLight( 0x404040 ); // soft white light
 scene.add( light );
 
-const directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+const directionalLight = new THREE.DirectionalLight( 0xeeeeee, 1 );
+directionalLight.position.set(0, 2, 0);
+directionalLight.rotateX(THREE.MathUtils.DEG2RAD*30);
+directionalLight.rotateY(THREE.MathUtils.DEG2RAD*30);
 scene.add( directionalLight );
 
 const renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -63,41 +66,47 @@ var cameraDeadZone = 1; // pixels
 
 const textureLoader = new THREE.TextureLoader();
 
+
+/*
 var grassTexture = textureLoader.load("/assets/grass.png");
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(600, 600);
+*/
 
 var brickTexture = textureLoader.load("/assets/bricks.png");
 brickTexture.wrapS = THREE.RepeatWrapping;
 brickTexture.wrapT = THREE.RepeatWrapping;
-brickTexture.repeat.set(600, 600);
+brickTexture.repeat.set(1, 0.5);
 
 var groundTexture = textureLoader.load("/assets/ground.png");
 groundTexture.wrapS = THREE.RepeatWrapping;
 groundTexture.wrapT = THREE.RepeatWrapping;
-groundTexture.repeat.set(600, 600);
+groundTexture.repeat.set(2, 2);
 
 var raycaster = new THREE.Raycaster();
 
 var commonMaterial = new THREE.MeshToonMaterial({color: 0x8F9779});
 
+/*
 var floorMesh = new THREE.BoxGeometry(10, 0.2, 10);
 var floorMaterial = new THREE.MeshToonMaterial({color: 0x50C878, map:grassTexture});
 var floorObj = new THREE.Mesh(floorMesh, floorMaterial);
-floorObj.scale.x = 100;
-floorObj.scale.z = 100;
+floorObj.scale.x = 5;
+floorObj.scale.z = 5;
 floorObj.position.y = -0.1;
+*/
 //scene.add(floorObj);
 
+var groundSize = new THREE.Vector3(30, 0.2, 30);
+
+var groundMesh = new THREE.BoxGeometry(groundSize.x, groundSize.y, groundSize.z);
 var groundMaterial = new THREE.MeshToonMaterial({color: 0xffffff, map: groundTexture});
-var groundObj = new THREE.Mesh(floorMesh, groundMaterial);
-groundObj.scale.x = 100;
-groundObj.scale.z = 100;
+var groundObj = new THREE.Mesh(groundMesh, groundMaterial);
 groundObj.position.y = -0.1;
 scene.add(groundObj);
 
-var obstacleGeo = new THREE.BoxGeometry(2,2,2);
+var obstacleGeo = new THREE.BoxGeometry(1,1,1);
 var obstacleMaterial = new THREE.MeshToonMaterial({color: 0xffffff, map:brickTexture});
 
 
@@ -108,13 +117,96 @@ var isMoveBackward = false;
 var canFire = false;
 var isFiring = false;
 var currentSpeed = 0;
-var maxSpeed = 0.01;
+var maxForwardSpeed = 0.03;
+var maxBackwardSpeed = 0.01;
 
 var obstacles = new THREE.Group();
+
+const obstaclesConfig = [
+   /** walls */
+   {
+      position: new THREE.Vector3(-groundSize.x/2, 1, 0),
+      size: new THREE.Vector3(2, 2, groundSize.z)
+   },
+   {
+      position: new THREE.Vector3(groundSize.x/2, 1, 0),
+      size: new THREE.Vector3(2, 2, groundSize.z)
+   },
+   {
+      position: new THREE.Vector3(0, 1, -groundSize.z/2),
+      size: new THREE.Vector3(groundSize.x, 2, 2)
+   },
+   {
+      position: new THREE.Vector3(0, 1, groundSize.z/2),
+      size: new THREE.Vector3(groundSize.x, 2, 2)
+   },
+   /** obstacles */
+   {
+      position: new THREE.Vector3(-groundSize.x/6, 1, -groundSize.z/3),
+      size: new THREE.Vector3(groundSize.x/5, 2, groundSize.z/3)
+   },
+   {
+      position: new THREE.Vector3(-groundSize.x/3, 1, groundSize.z/6),
+      size: new THREE.Vector3(groundSize.x/3, 2, groundSize.z/5)
+   },
+   {
+      position: new THREE.Vector3(groundSize.x/6, 1, groundSize.z/3),
+      size: new THREE.Vector3(groundSize.x/5, 2, groundSize.z/3)
+   },
+   {
+      position: new THREE.Vector3(groundSize.x/3, 1, -groundSize.z/6),
+      size: new THREE.Vector3(groundSize.x/3, 2, groundSize.z/5)
+   },
+
+];
+
+/** default rotation <0, 0, -1> counter clockwise, rotate(positive) */
+const spawnPoints = [
+   {
+      position: new THREE.Vector3(-groundSize.x/3, 0.2, -groundSize.z/3),
+      rotation: THREE.MathUtils.DEG2RAD*180,
+   },
+   {
+      position: new THREE.Vector3(-groundSize.x/3, 0.2, 0), 
+      rotation: THREE.MathUtils.DEG2RAD*0,
+   },
+   {
+      position: new THREE.Vector3(-groundSize.x/3, 0.2, groundSize.x/3),
+      rotation: THREE.MathUtils.DEG2RAD*-90,
+   },
+   {
+      position: new THREE.Vector3(0, 0.2, -groundSize.z/3),
+      rotation: THREE.MathUtils.DEG2RAD*-90,
+   },
+   {
+      position: new THREE.Vector3(0, 0.2, groundSize.z/3),
+      rotation: THREE.MathUtils.DEG2RAD*90,
+   },
+   {
+      position: new THREE.Vector3(groundSize.x/3, 0.2, -groundSize.z/3),
+      rotation: THREE.MathUtils.DEG2RAD*90,
+   },
+   {
+      position: new THREE.Vector3(groundSize.x/3, 0.2, 0), 
+      rotation: THREE.MathUtils.DEG2RAD*180,
+   },
+   {
+      position: new THREE.Vector3(groundSize.x/3, 0.2, groundSize.x/3),
+      rotation: THREE.MathUtils.DEG2RAD*0,
+   },
+];
 
 
 /** obstacles */
 function initObstacles(){
+   obstaclesConfig.forEach(obstacle => {
+      const geom = new THREE.BoxGeometry(obstacle.size.x, obstacle.size.y, obstacle.size.z);
+      const cube = new THREE.Mesh(geom, obstacleMaterial);
+      cube.position.copy(obstacle.position);
+      obstacles.add(cube);
+   })
+   scene.add(obstacles);
+   /*
    for (var i = -40; i <= 40;){
       for (var j = -40; j <= 40;){
          const cube = new THREE.Mesh( obstacleGeo, obstacleMaterial);
@@ -125,7 +217,11 @@ function initObstacles(){
       }
       i += Math.random()*10;
    }
+   */
    scene.add(obstacles);
+
+   // add walls
+
 }
 
 initObstacles();
@@ -277,12 +373,20 @@ tank_pref = load_model("/assets/tank.obj");
 bullet_pref = load_model("/assets/bullet.obj");
 
 async function instantiateTank(){
+   var index = Math.floor(Math.random()*spawnPoints.length);
+
+
+   var initial = spawnPoints[index];
+
    tank = tank_pref.clone(true);
-   tank.position.z = -1;
-   tank.position.y = 0.2;
-   console.log(tank);
+   tank.position.copy(initial.position);
+   tank.rotateY(initial.rotation);
+   //console.log(tank);
    scene.add(tank);
    cameraLookatObj.position.copy(tank.position);
+
+   console.log(index);
+   console.log(tank);
 }
 
 function instantiateBullet(){
@@ -369,10 +473,10 @@ function render(time){
 
    /** vertical speed */
    if (isMoveForward){
-      currentSpeed = THREE.MathUtils.lerp(currentSpeed, maxSpeed, 0.02);
+      currentSpeed = THREE.MathUtils.lerp(currentSpeed, maxForwardSpeed, 0.01);
    }
    else if(isMoveBackward){
-      currentSpeed = THREE.MathUtils.lerp(currentSpeed, -maxSpeed, 0.02);
+      currentSpeed = THREE.MathUtils.lerp(currentSpeed, -maxBackwardSpeed, 0.01);
    }
    else {
       currentSpeed = THREE.MathUtils.lerp(currentSpeed, 0, 0.01);

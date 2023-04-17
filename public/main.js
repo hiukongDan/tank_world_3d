@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 console.log("Hello world");
 
@@ -13,6 +14,8 @@ camera.lookAt(new THREE.Vector3(0,0,0));
 //camera.position.z = 1;
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color( 0xcccccc );
+scene.fog = new THREE.FogExp2( 0xcccccc, 0.002 );
 
 const light = new THREE.AmbientLight( 0x404040 ); // soft white light
 scene.add( light );
@@ -24,8 +27,20 @@ const renderer = new THREE.WebGLRenderer( { antialias: true } );
 renderer.setSize( window.innerWidth, window.innerHeight );
 // renderer.setAnimationLoop( animation );
 document.body.appendChild( renderer.domElement );
-const pointerLockControl = new PointerLockControls(camera, document.body);
-console.log(pointerLockControl);
+//const pointerLockControl = new PointerLockControls(camera, document.body);
+//console.log(pointerLockControl);
+
+
+const orbitControls = new OrbitControls( camera, renderer.domElement );
+orbitControls.listenToKeyEvents( window ); // optional
+orbitControls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+orbitControls.dampingFactor = 0.05;
+orbitControls.screenSpacePanning = false;
+orbitControls.maxDistance = 2;
+orbitControls.maxPolarAngle = Math.PI / 3;
+orbitControls.minPolarAngle = Math.PI/5;
+orbitControls.enableZoom = false;
+orbitControls.listenToKeyEvents( window ); // optional
 
 
 var isMouseDown = false;
@@ -69,7 +84,7 @@ var isTurnRight = false;
 var isMoveForward = false;
 var isMoveBackward = false;
 var canFire = false;
-var isFiring = true;
+var isFiring = false;
 var currentSpeed = 0;
 var maxSpeed = 0.01;
 
@@ -108,6 +123,7 @@ addEventListener("mousemove", event=>{
 });
 
 
+/*
 document.addEventListener( 'click', function () {
    pointerLockControl.lock();
 });
@@ -134,6 +150,7 @@ pointerLockControl.addEventListener("change", function(event){
       pointer_last_frame_position.set(event.x, event.y);
    }
 });
+*/
 
 addEventListener('keydown', function(event) {
    if (event.code == 'KeyA') {
@@ -246,15 +263,20 @@ setTimeout(() => {
 var frameRate = 60;
 function render(time){
    if (tank != null){
-      var direction = new THREE.Vector3();
-      tank.getWorldDirection(direction);
-
-      var newPos = new THREE.Vector3();
-      newPos.copy(tank.position);
-      newPos.x += direction.x;
-      newPos.z += direction.z;
-      newPos.y = 1;
-      camera.position.copy(newPos);
+      if(isMoveForward || isMoveBackward){
+         /*
+         var direction = new THREE.Vector3();
+         tank.getWorldDirection(direction);
+         var newPos = new THREE.Vector3();
+         newPos.copy(tank.position);
+         newPos.x += direction.x;
+         newPos.z += direction.z;
+         newPos.y = 1;
+         camera.position.copy(newPos);
+         */
+      }
+      orbitControls.target.copy(tank.position);
+      console.log(orbitControls);
       
       //camera.lookAt(tank.position);
 
@@ -267,7 +289,7 @@ function render(time){
 
          //cameraLookatObj.rotateOnWorldAxis(new THREE.Vector3())
          //console.log(cameraRotation.y);
-         tank.rotateY(cameraRotation.y*THREE.MathUtils.DEG2RAD);
+         //tank.rotateY(cameraRotation.y*THREE.MathUtils.DEG2RAD);
          // console.log(tank.rotation);
          
          //camera.rotateOnAxis(new THREE.Vector3(0, 0, 1), newYaw*THREE.MathUtils.DEG2RAD);
@@ -324,6 +346,7 @@ function render(time){
       tank.position.copy(targetPosition);
    }
 
+   orbitControls.update();
 
    setTimeout(requestAnimationFrame(render), 1000/frameRate);
 }

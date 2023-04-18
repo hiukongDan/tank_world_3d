@@ -1,0 +1,72 @@
+/***************
+Game Definition
+***************/
+In a map of 30x30(THREE.js unit) arena with walls surrounded
+at most 8 players in the same arena (there are 8 unique spawn points)
+
+Within given time (5 min)
+player controls their own tank and fire projectiles toward other players
+projectile causes 30% damage
+when a tank has damage equal or over 100%, it's destroyed, the player landed the last
+    projectile which caused it destroyed will have kill count plus one
+the player has to wait for respawning time (5 sec)
+the player will be respawned in a random spawning point, with no other players within 2(unit) radius
+
+
+
+/************
+Movement
+************/
+w: forward
+s: backward
+a: left turn
+d: right turn
+mouse drag: camera orbits
+space: fire a projectile
+
+/************
+Leader board
+************/
+kill count: total tank destroyed by users
+ranked by kill count
+
+
+Game Data transmission
+
+/************
+From client
+************/
+{
+    isMoveForward: true | false,
+    isMoveBackward: true | false,
+    isTurnLeft: true | false,
+    isTurnRight: true | false,
+    isFiring: true | false,
+}
+
+
+
+/*************
+From host
+*************/
+{
+    tanks:[
+        {
+            isAlive: true|false,
+            position: THREE.Vector3,
+            rotation: THREE.Vector3,
+            hp: Number,
+            kill_count: Number,
+            player_name: String,
+        }
+    ],
+    projectiles:[
+        {
+            position: THREE.Vector3,
+            rotation: THREE.Vector3,
+            id: Number,
+            owner: String (same as player_name),
+            isCollided: true|false
+        }
+    ]
+}
